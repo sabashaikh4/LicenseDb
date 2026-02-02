@@ -809,3 +809,110 @@ func getSimilarLicenses(c *gin.Context) {
 		},
 	})
 }
+
+// QueryLicenses handles both filter and search in a single endpoint
+func QueryLicenses(c *gin.Context) {
+    var req models.LicenseQueryRequest
+    
+    // Check if it's a POST request with body
+    if c.Request.Method == "POST" {
+        if err := c.ShouldBindJSON(&req); err != nil {
+            er := models.LicenseError{
+                Status:    http.StatusBadRequest,
+                Message:   "invalid request body",
+                Error:     err.Error(),
+                Path:      c.Request.URL.Path,
+                Timestamp: time.Now().Format(time.RFC3339),
+            }
+            c.JSON(http.StatusBadRequest, er)
+            return
+        }
+    } else {
+        // Handle GET request - convert query params to struct
+        if active := c.Query("active"); active != "" {
+            activeBool := active == "true"
+            req.Active = &activeBool
+        }
+        if osiApproved := c.Query("osiApproved"); osiApproved != "" {
+            osiBool := osiApproved == "true"
+            req.OSIApproved = &osiBool
+        }
+        req.ShortName = c.Query("shortName")
+        req.Search = c.Query("search")
+        
+        if searchIn := c.Query("searchIn"); searchIn != "" {
+            req.SearchIn = strings.Split(searchIn, ",")
+        }
+    }
+    
+    var licenses []models.License
+    query := db.DB.Model(&models.License{})
+    
+    // Apply filters
+    if req.Active != nil {
+        query = query.Where("rf_active = ?", *req.Active)
+    }
+    if req.OSIApproved != nil {
+        query = query.Where("rf_OSI_approved = ?", *req.OSIApproved)
+    }
+    if req.ShortName != "" {
+        query = query.Where("rf_shortname ILIKE ?", "%"+req.ShortName+"%")
+    }
+    
+    // Apply search
+    if req.Search != "" {
+        searchQuery := "%" + req.Search + "%"
+        if len(req.SearchIn) > 0 {
+            // Search in specific fields
+            var conditions []string
+            var values []interface{}
+            
+            for _, field := range req.SearchIn {
+                switch field {
+                case "fullName":
+                    conditions = append(conditions, "rf_fullname ILIKE ?")
+                    values = append(values, searchQuery)
+                case "text":
+                    conditions = append(conditions, "rf_text ILIKE ?")
+                    values = append(values, searchQuery)
+                case "shortName":
+                    conditions = append(conditions, "rf_shortname ILIKE ?")
+                    values = append(values, searchQuery)
+                }
+            }
+            
+            if len(conditions) > 0 {
+                query = query.Where(strings.Join(conditions, " OR "), values...)
+            }
+        } else {
+            // Default: search in all text fields
+            query = query.Where("rf_fullname ILIKE ? OR rf_text ILIKE ? OR rf_shortname ILIKE ?",
+                searchQuery, searchQuery, searchQuery)
+        }
+    }
+    
+    // Apply pagination
+    if req.Limit > 0 {
+        query = query.Limit(req.Limit)
+    } else {
+        query = query.Limit(50) // Default limit
+    }
+    if req.Offset > 0 {
+        query = query.Offset(req.Offset)
+    }
+    
+    // Execute query
+    if err := query.Find(&licenses).Error; err != nil {
+        er := models.LicenseError{
+            Status:    http.StatusInternalServerError,
+            Message:   "Failed to fetch licenses",
+            Error:     err.Error(),
+            Path:      c.Request.URL.Path,
+            Timestamp: time.Now().Format(time.RFC3339),
+        }
+        c.JSON(http.StatusInternalServerError, er)
+        return
+    }
+    
+    c.JSON(http.StatusOK, licenses)
+}
