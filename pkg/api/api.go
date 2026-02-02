@@ -112,21 +112,23 @@ func Router() *gin.Engine {
 		authorizedv1.Use(middleware.AuthenticationMiddleware())
 		{
 			licenses := authorizedv1.Group("/licenses")
-			{
-				licenses.GET("", FilterLicense)
-				licenses.GET(":id", GetLicense)
-				licenses.GET("export", ExportLicenses)
-				licenses.GET("/preview", GetAllLicensePreviews)
-				licenses.POST("", CreateLicense)
-				licenses.PATCH(":id", UpdateLicense)
-				licenses.POST("import", middleware.RoleBasedAccessMiddleware([]string{"ADMIN", "SUPER_ADMIN"}), ImportLicenses)
-				licenses.POST("/similarity", getSimilarLicenses)
-
-			}
-			search := authorizedv1.Group("/search")
-			{
-				search.POST("", SearchInLicense)
-			}
+        {
+    licenses.GET("", QueryLicenses)      // Changed: unified endpoint
+    licenses.POST("", QueryLicenses)     // New: supports POST for combined queries
+    licenses.GET(":id", GetLicense)
+    licenses.GET("export", ExportLicenses)
+    licenses.GET("/preview", GetAllLicensePreviews)
+    licenses.POST("/create", CreateLicense)  // Changed: moved to /create to avoid conflict
+    licenses.PATCH(":id", UpdateLicense)
+    licenses.POST("import", middleware.RoleBasedAccessMiddleware([]string{"ADMIN", "SUPER_ADMIN"}), ImportLicenses)
+    licenses.POST("/similarity", getSimilarLicenses)
+       }
+			// Deprecated: Use POST /licenses with search parameter instead
+// Kept for backward compatibility
+search := authorizedv1.Group("/search")
+{
+    search.POST("", SearchInLicense)
+}
 			users := authorizedv1.Group("/users")
 			{
 				users.GET("", middleware.RoleBasedAccessMiddleware([]string{"ADMIN", "SUPER_ADMIN"}), auth.GetAllUser)
