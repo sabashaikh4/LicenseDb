@@ -372,3 +372,20 @@ type LicenseResponse struct {
 type UpdateExternalRefsJSONPayload struct {
 	ExternalRef map[string]interface{} `json:"external_ref"`
 }
+
+
+// LicenseQueryRequest represents combined filter and search request
+type LicenseQueryRequest struct {
+    // Filter parameters
+    Active      *bool   `json:"active,omitempty"`
+    OSIApproved *bool   `json:"osiApproved,omitempty"`
+    ShortName   string  `json:"shortName,omitempty"`
+    
+    // Search parameters
+    Search      string   `json:"search,omitempty"`
+    SearchIn    []string `json:"searchIn,omitempty"` // ["fullName", "text", "shortName"]
+    
+    // Pagination
+    Limit       int `json:"limit,omitempty"`
+    Offset      int `json:"offset,omitempty"`
+}
